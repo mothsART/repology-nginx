@@ -2,6 +2,8 @@
 
 import argparse
 import os
+from os import listdir, makedirs
+from os.path import isfile, join, exists
 from pathlib import Path
 
 import requests
@@ -22,9 +24,27 @@ def init_argparse() -> argparse.ArgumentParser:
     parser.add_argument('path', nargs='*')
     return parser
 
-def get_html():
-    r = requests.get(URL_ROOT)
+def get_html(url):
+    r = requests.get(url)
     return r.text
+
+def retrieve_content():
+    makedirs(DIR_DESTINATION, exist_ok=True)
+    html_content = get_html(URL_ROOT)
+    with open(join(DIR_DESTINATION, f'page-0.html'), 'w') as f:
+        f.write(html_content)
+    inc = 1
+    url = ''
+    while True:
+        new_url = "https://repology.org" + Selector(text=html_content).xpath('//div[@class="btn-group"]/a[@rel="next"]/@href').get()
+        if new_url == url:
+            break
+        url = new_url
+        html_content = get_html(url)
+        inc += 1
+        print(new_url)
+        with open(join(DIR_DESTINATION, f'page-{inc}.html'), 'w') as f:
+            f.write(html_content)
 
 def get_permanent_links(html_txt):
     packages = []
@@ -39,7 +59,6 @@ def get_permanent_links(html_txt):
                 "before": code_tags[0],
                 "after": code_tags[1],
             })
-            break
     return packages
 
 def replace_nix_file(nixpkgs_path, package):
@@ -56,22 +75,20 @@ if __name__ == '__main__':
     args = parser.parse_args()
     nixpkgs_path = None
     if not args.path:
-        print("Error : need a nixpkgs path")
+        print("Error : need a nixpkgs repository path")
         exit(0)
     nixpkgs_path = args.path[0]
-    if not os.path.exists(nixpkgs_path):
-        print(f"Error : nixpkgs path '{nixpkgs_path}' didn't exists")
+    if not exists(nixpkgs_path):
+        print(f"Error : nixpkgs repository path '{nixpkgs_path}' didn't exists")
         exit(0)
 
-    index_path = '%s/index.html' % DIR_DESTINATION
-    
-    #html_txt = get_html()
-    #os.makedirs(DIR_DESTINATION, exist_ok=True)
-    #with open(index_path, 'w') as f:
-    #    f.write(html_txt)
+    retrieve_content()
 
-    content_index = Path(index_path).read_text(encoding="UTF-8")
-    packages = get_permanent_links(content_index)
+    repology_files = [f for f in listdir(DIR_DESTINATION) if isfile(join(DIR_DESTINATION, f))]
+    packages = []
+    for r_file in repology_files:
+        content_index = Path(join(DIR_DESTINATION, r_file)).read_text(encoding="UTF-8")
+        packages += get_permanent_links(content_index)
 
     for p in packages:
         replace_nix_file(nixpkgs_path, p)
