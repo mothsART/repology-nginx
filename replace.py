@@ -66,7 +66,16 @@ def replace_nix_file(nixpkgs_path, package):
     nix_file_content = Path(nix_file_path).read_text(encoding="UTF-8")
     new_content = nix_file_content.replace(package['before'], package['after'])
     if new_content == nix_file_content:
-        return
+        if (
+            package['before'][len(package['before']) - 1] == '/'
+            and package['after'][len(package['after']) - 1]
+        ):
+            new_content = nix_file_content.replace(
+                package['before'][:-1:],
+                package['after'][:-1:]
+            )
+        else:
+            return
     with open(nix_file_path, 'w') as f:
         f.write(new_content)
 
